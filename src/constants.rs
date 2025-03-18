@@ -10,8 +10,10 @@ pub const PADDLE_SPEED: f32 = 300.0;
 pub const PADDLE_PADDING: f32 = 10.0;
 
 // We set the z-value of the ball to 1 so it renders on top in the case of overlapping sprites.
-pub const PROJECTILE_SPEED: f32 = 400.0;
+pub const PROJECTILE_SPEED: f32 = 450.0;
 pub const INITITAL_PROJECTILE_DIRECTION: Vec2 = Vec2::new(0., 1.);
+pub const PROJECTILE_SIZE: f32 = 30.;
+pub const PROJECTILE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 
 // x coordinates
 pub const RIGHT: f32 = VIEWPORT_WIDTH / 2.;
@@ -20,13 +22,9 @@ pub const LEFT: f32 = -RIGHT;
 pub const TOP: f32 = VIEWPORT_HEIGHT / 2.;
 pub const BOTTOM: f32 = -TOP;
 
-pub const PROJECTILE_SIZE: f32 = 30.;
-
 pub const SCOREBOARD_FONT_SIZE: f32 = 33.0;
 pub const SCOREBOARD_TEXT_PADDING: Val = Val::Px(5.0);
 
-pub const PADDLE_COLOR: Color = Color::srgb(0.3, 0.3, 0.7);
-pub const BALL_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 pub const BRICK_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
 pub const TEXT_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
 pub const SCORE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);

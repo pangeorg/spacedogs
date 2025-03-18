@@ -1,4 +1,7 @@
+use std::{f32::consts::PI, ops::Deref};
+
 use bevy::{
+    ecs::event,
     math::bounding::{Aabb2d, BoundingCircle, IntersectsVolume},
     prelude::*,
     render::camera::ScalingMode,
@@ -28,6 +31,7 @@ fn main() {
         )
         .insert_resource(Score(0))
         .add_event::<CollisionEvent>()
+        .add_event::<EnemyDiedEvent>()
         .add_systems(Startup, setup)
         // Add our gameplay simulation systems to the fixed timestep schedule
         // which runs at 65 Hz by default
@@ -45,7 +49,12 @@ fn main() {
         )
         .add_systems(
             Update,
-            (update_scoreboard, despawn_out_of_world, move_background),
+            (
+                update_scoreboard,
+                despawn_out_of_world,
+                move_background,
+                on_enemy_died,
+            ),
         )
         .run();
 }
@@ -84,8 +93,26 @@ struct Collider;
 #[derive(Event, Default)]
 struct CollisionEvent;
 
+#[derive(Event)]
+struct EnemyDiedEvent {
+    entity: Entity,
+    position: Vec2,
+}
+
 #[derive(Component)]
 struct Enemy;
+
+#[derive(Component)]
+struct Health(i32);
+
+#[derive(Component)]
+struct Debris;
+
+impl Health {
+    pub fn dec(&mut self) {
+        self.0 -= 1;
+    }
+}
 
 // This resource tracks the game's score
 #[derive(Resource, Deref, DerefMut)]
@@ -98,7 +125,12 @@ struct ScoreboardUi;
 struct Background;
 
 // Add the game's entities to our world
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
     // Camera
     commands.spawn((
         Camera2d,
@@ -142,14 +174,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Player
     let player_y = BOTTOM + GAP_BETWEEN_PADDLE_AND_FLOOR;
 
+    let player_mesh = meshes.add(Triangle2d::new(
+        Vec2::Y * 30.0,
+        Vec2::new(-30.0, -30.0),
+        Vec2::new(30.0, -30.0),
+    ));
+    let color = Color::hsl(0.8, 0.95, 0.7);
+
     commands.spawn((
-        Sprite::from_color(PADDLE_COLOR, Vec2::ONE),
+        Mesh2d(player_mesh),
+        MeshMaterial2d(materials.add(color)),
         Transform {
-            translation: Vec3::new(0.0, player_y, 1.0),
-            scale: PADDLE_SIZE.extend(1.0),
+            translation: Vec3::new(0.0, player_y, 0.0),
             ..default()
         },
-        Player::new(0.33),
+        Player::new(0.2),
         Collider,
         Momentum(Vec2::new(0., 0.)),
     ));
@@ -275,6 +314,8 @@ fn player_shoot(
     mut commands: Commands,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     player_query: Single<(&mut Player, &Transform), With<Player>>,
 ) {
     if !keyboard_input.pressed(KeyCode::Space) {
@@ -298,14 +339,12 @@ fn player_shoot(
         player_transform.translation.y,
     );
 
+    let projectile_mesh = meshes.add(Ellipse::new(5.0, 10.0));
     commands.spawn((
-        Sprite {
-            color: BALL_COLOR,
-            ..default()
-        },
+        Mesh2d(projectile_mesh),
+        MeshMaterial2d(materials.add(PROJECTILE_COLOR)),
         Transform {
             translation: pos.extend(0.0),
-            scale: Vec3::new(PROJECTILE_SIZE, PROJECTILE_SIZE, 1.0),
             ..default()
         },
         PlayerProjectile,
@@ -337,12 +376,10 @@ fn despawn_out_of_world(
 
 fn spawn_enemies(mut commands: Commands, enemy_query: Query<Entity, With<Enemy>>) {
     let n_enemies = enemy_query.iter().count();
-    if n_enemies > 10 {
+    if n_enemies > 20 {
         return;
     }
-    if rand::random_range(1..10) < 5 {
-        return;
-    }
+
     let x = rand::random_range(LEFT..RIGHT);
     let y = TOP;
     let pos = Vec2::new(x, y);
@@ -358,6 +395,7 @@ fn spawn_enemies(mut commands: Commands, enemy_query: Query<Entity, With<Enemy>>
             ..default()
         },
         Enemy,
+        Health(2),
         Collider,
         Velocity(Vec2::new(0., -1.) * PROJECTILE_SPEED),
     ));
@@ -368,13 +406,13 @@ fn check_for_collisions(
     mut score: ResMut<Score>,
     player_query: Single<&Transform, With<Player>>,
     projectile_query: Query<(Entity, &Transform), With<PlayerProjectile>>,
-    enemy_query: Query<(Entity, &Transform), With<Enemy>>,
-    mut collision_events: EventWriter<CollisionEvent>,
+    mut enemy_query: Query<(Entity, &Transform, &mut Health), With<Enemy>>,
+    mut enemy_died_events: EventWriter<EnemyDiedEvent>,
 ) {
     let player_transform = player_query.into_inner();
 
     // check if player is hit by enemy
-    for (enemy, enemy_transform) in &enemy_query {
+    for (enemy, enemy_transform, mut enemy_health) in &mut enemy_query {
         let player_collision = collision(
             BoundingCircle::new(enemy_transform.translation.truncate(), 1.0 / 2.),
             Aabb2d::new(
@@ -385,7 +423,6 @@ fn check_for_collisions(
 
         if player_collision {
             // Sends a collision event so that other systems can react to the collision
-            collision_events.send_default();
             commands.entity(enemy).despawn();
             **score -= 1;
         }
@@ -400,12 +437,51 @@ fn check_for_collisions(
             );
 
             if projectile_collision {
-                // Sends a collision event so that other systems can react to the collision
-                collision_events.send_default();
-                commands.entity(enemy).despawn();
+                enemy_health.dec();
+                if enemy_health.0 <= 0 {
+                    enemy_died_events.send(EnemyDiedEvent {
+                        entity: enemy,
+                        position: projectile_transform.translation.truncate(),
+                    });
+                }
                 commands.entity(projectile).despawn();
-                **score += 1;
             }
+        }
+    }
+}
+
+fn on_enemy_died(
+    mut commands: Commands,
+    mut score: ResMut<Score>,
+    mut ev_enemy_died: EventReader<EnemyDiedEvent>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    for event in ev_enemy_died.read() {
+        commands.entity(event.entity).despawn();
+        **score += 1;
+
+        for _ in 0..20 {
+            let debris_mesh = meshes.add(Triangle2d::new(
+                Vec2::Y * 2.0,
+                Vec2::new(-2.0, -2.0),
+                Vec2::new(2.0, -2.0),
+            ));
+            let color = Color::hsl(0.5, 0.35, 0.7);
+            let r: f32 = rand::random();
+            let x = (r * 2.0 * PI).cos();
+            let y = (r * 2.0 * PI).sin();
+
+            commands.spawn((
+                Mesh2d(debris_mesh),
+                MeshMaterial2d(materials.add(color)),
+                Transform {
+                    translation: event.position.extend(1.0),
+                    ..default()
+                },
+                Debris,
+                Velocity(Vec2::new(x, y) * PROJECTILE_SPEED),
+            ));
         }
     }
 }
