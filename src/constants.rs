@@ -1,4 +1,5 @@
-use bevy::prelude::*;
+use crate::prelude::*;
+
 pub const VIEWPORT_WIDTH: f32 = 1920.;
 pub const VIEWPORT_HEIGHT: f32 = 1080.;
 // These constants are defined in `Transform` units.
