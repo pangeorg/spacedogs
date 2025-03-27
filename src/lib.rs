@@ -1,4 +1,5 @@
 mod constants;
+mod enemy;
 mod graphics;
 mod helpers;
 mod physics;

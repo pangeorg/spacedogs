@@ -1,9 +1,7 @@
 use crate::prelude::player::*;
 use crate::prelude::ui::*;
-use crate::prelude::world::*;
 use crate::prelude::*;
 
-use bevy::math::NormedVectorSpace;
 use bevy::math::bounding::{Aabb2d, BoundingCircle, IntersectsVolume};
 
 #[derive(Component)]
@@ -22,11 +20,8 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            FixedUpdate,
-            ((apply_path, apply_velocity).chain(), check_for_collisions),
-        )
-        .add_event::<CollisionEvent>();
+        app.add_systems(FixedUpdate, (apply_velocity, check_for_collisions))
+            .add_event::<CollisionEvent>();
     }
 }
 
@@ -34,17 +29,6 @@ fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>
     for (mut transform, velocity) in &mut query {
         transform.translation.x += velocity.x * time.delta_secs();
         transform.translation.y += velocity.y * time.delta_secs();
-    }
-}
-
-fn apply_path(mut query: Query<(&mut Velocity, &Transform, &mut PolyPath)>, time: Res<Time>) {
-    for (mut velocity, transform, mut path) in &mut query {
-        let vabs = velocity.norm();
-        let dx = vabs * time.delta_secs();
-        let pos = transform.translation.truncate();
-        let next_pos = path.step(dx);
-        let dir = (next_pos - pos).normalize();
-        velocity.0 = vabs * dir;
     }
 }
 
