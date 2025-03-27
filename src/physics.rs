@@ -3,6 +3,7 @@ use crate::prelude::ui::*;
 use crate::prelude::world::*;
 use crate::prelude::*;
 
+use bevy::math::NormedVectorSpace;
 use bevy::math::bounding::{Aabb2d, BoundingCircle, IntersectsVolume};
 
 #[derive(Component)]
@@ -21,8 +22,11 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedUpdate, (apply_velocity, check_for_collisions))
-            .add_event::<CollisionEvent>();
+        app.add_systems(
+            FixedUpdate,
+            ((apply_path, apply_velocity).chain(), check_for_collisions),
+        )
+        .add_event::<CollisionEvent>();
     }
 }
 
@@ -33,18 +37,29 @@ fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>
     }
 }
 
+fn apply_path(mut query: Query<(&mut Velocity, &Transform, &mut PolyPath)>, time: Res<Time>) {
+    for (mut velocity, transform, mut path) in &mut query {
+        let vabs = velocity.norm();
+        let dx = vabs * time.delta_secs();
+        let pos = transform.translation.truncate();
+        let next_pos = path.step(dx);
+        let dir = (next_pos - pos).normalize();
+        velocity.0 = vabs * dir;
+    }
+}
+
 fn check_for_collisions(
     mut commands: Commands,
     mut score: ResMut<Score>,
     player_query: Single<&Transform, With<Player>>,
     projectile_query: Query<(Entity, &Transform), With<PlayerProjectile>>,
-    mut enemy_query: Query<(Entity, &Transform, &mut Health), With<Enemy>>,
+    mut enemy_query: Query<(Entity, &Transform, &mut Health, &Enemy), With<Enemy>>,
     mut enemy_died_events: EventWriter<EnemyDiedEvent>,
 ) {
     let player_transform = player_query.into_inner();
 
     // check if player is hit by enemy
-    for (enemy, enemy_transform, mut enemy_health) in &mut enemy_query {
+    for (enemy_id, enemy_transform, mut enemy_health, enemy) in &mut enemy_query {
         let player_collision = collision(
             BoundingCircle::new(enemy_transform.translation.truncate(), 1.0 / 2.),
             Aabb2d::new(
@@ -55,7 +70,7 @@ fn check_for_collisions(
 
         if player_collision {
             // Sends a collision event so that other systems can react to the collision
-            commands.entity(enemy).despawn();
+            commands.entity(enemy_id).despawn();
             **score -= 1;
         }
 
@@ -72,7 +87,8 @@ fn check_for_collisions(
                 enemy_health.dec();
                 if enemy_health.0 <= 0 {
                     enemy_died_events.send(EnemyDiedEvent {
-                        entity: enemy,
+                        entity: enemy_id,
+                        enemy_type: enemy.enemy_type.to_owned(),
                         position: projectile_transform.translation.truncate(),
                     });
                 }

@@ -1,3 +1,4 @@
+/// Shared components for the game
 use crate::prelude::*;
 
 #[derive(Component)]
