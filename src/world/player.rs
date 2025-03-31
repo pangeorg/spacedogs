@@ -8,6 +8,9 @@ pub struct Player {
     last_shot: f32,
 }
 
+#[derive(Event, Default)]
+pub struct PlayerHitByEnemyEvent;
+
 impl Player {
     pub fn new(fire_rate: f32) -> Self {
         Player {
@@ -28,8 +31,9 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, (spawn,))
-            .add_systems(Update, (control, shoot));
+        app.add_event::<PlayerHitByEnemyEvent>()
+            .add_systems(Startup, (spawn,))
+            .add_systems(Update, (control, shoot, on_collision));
     }
 }
 
@@ -49,6 +53,7 @@ fn spawn(
     let color = Color::hsl(0.8, 0.95, 0.7);
 
     commands.spawn((
+        Name::new("Player"),
         Mesh2d(player_mesh),
         MeshMaterial2d(materials.add(color)),
         Transform {
@@ -59,6 +64,24 @@ fn spawn(
         Collider,
         Momentum(Vec2::new(0., 0.)),
     ));
+}
+
+fn on_collision(
+    mut colission_events: EventReader<CollisionEvent>,
+    mut player_enemy_colission_events: EventWriter<PlayerHitByEnemyEvent>,
+    player_query: Single<Entity, With<Player>>,
+    enemy_query: Query<Entity, With<Enemy>>,
+) {
+    let player_entity = player_query.into_inner();
+    for event in colission_events.read() {
+        let (e1, e2) = (event.entity1, event.entity2);
+        let is_player = e1 == player_entity || e2 == player_entity;
+
+        if is_player && (enemy_query.contains(e1) || enemy_query.contains(e2)) {
+            let player_hit_by_enemy_event = PlayerHitByEnemyEvent::default();
+            player_enemy_colission_events.send(player_hit_by_enemy_event);
+        }
+    }
 }
 
 fn control(
@@ -159,6 +182,7 @@ fn shoot(
 
     let projectile_mesh = meshes.add(Ellipse::new(5.0, 10.0));
     commands.spawn((
+        Name::new("PlayerProjectile"),
         Mesh2d(projectile_mesh),
         MeshMaterial2d(materials.add(PROJECTILE_COLOR)),
         Transform {

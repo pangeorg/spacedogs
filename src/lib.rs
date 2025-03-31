@@ -1,19 +1,15 @@
 mod constants;
-mod enemy;
 mod graphics;
 mod helpers;
 mod physics;
-mod player;
 mod prelude;
-mod shared;
 mod ui;
 mod world;
 
 use constants::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
 
 use crate::{
-    graphics::GraphicsPlugin, physics::PhysicsPlugin, player::PlayerPlugin, prelude::*,
-    ui::UiPlugin, world::WorldPlugin,
+    graphics::GraphicsPlugin, physics::PhysicsPlugin, prelude::*, ui::UiPlugin, world::WorldPlugin,
 };
 
 pub struct GamePlugin;
@@ -34,7 +30,6 @@ impl Plugin for GamePlugin {
                 .set(ImagePlugin::default_nearest()),
             GraphicsPlugin,
             PhysicsPlugin,
-            PlayerPlugin,
             WorldPlugin,
             UiPlugin,
         ));

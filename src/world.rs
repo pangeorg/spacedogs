@@ -1,18 +1,31 @@
 use std::f32::consts::PI;
 
+use enemy::EnemyDiedEvent;
+use enemy::EnemyPlugin;
+use player::Player;
+use player::PlayerPlugin;
+
 use crate::prelude::constants::*;
 use crate::prelude::physics::*;
 use crate::prelude::*;
 
+pub mod enemy;
+pub mod equipment;
+pub mod player;
+pub mod shared;
+
 #[derive(Component)]
 pub struct Debris;
 
-// everything which 'lives' but is not the player
+/// The plugin for everything in our world.
+/// Here we add the player, enemies, other structures of the world, e.g. debris.
+/// Also, dependent plugins, e.g., weapons, shields, ships should be added here.
+/// UI and physics will be handled 'externally'.
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((EnemyPlugin,)).add_systems(
+        app.add_plugins((EnemyPlugin, PlayerPlugin)).add_systems(
             Update,
             (despawn_out_of_world, on_enemy_died_debris, despawn::<Dead>),
         );
